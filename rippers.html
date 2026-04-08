@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RippersNewEra</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #080808;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      font-family: 'Courier New', monospace;
+    }
+
+    /* Dot-grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(0,255,65,0.07) 1px, transparent 1px);
+      background-size: 22px 22px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* CRT Scanlines */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(0,0,0,0.13) 0,
+        rgba(0,0,0,0.13) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* ── Main frame ── */
+    .frame {
+      position: relative;
+      z-index: 10;
+      padding: 52px 64px;
+      border: 2px solid #00ff41;
+      background: rgba(0, 10, 2, 0.8);
+      box-shadow:
+        0 0 18px  rgba(0, 255, 65, 0.55),
+        0 0 50px  rgba(0, 255, 65, 0.18),
+        0 0 110px rgba(0, 255, 65, 0.06),
+        inset 0 0 35px rgba(0, 255, 65, 0.04);
+      animation: flicker 8s ease-in-out infinite;
+    }
+
+    /* Inner inset border */
+    .frame::before {
+      content: '';
+      position: absolute;
+      inset: 7px;
+      border: 1px solid rgba(255, 26, 26, 0.22);
+      pointer-events: none;
+    }
+
+    @keyframes flicker {
+      0%, 91%, 100% { opacity: 1; }
+      92% { opacity: 0.86; }
+      93% { opacity: 1;    }
+      94% { opacity: 0.91; }
+      95% { opacity: 1;    }
+    }
+
+    /* Red corner brackets */
+    .corner {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-color: #ff1a1a;
+      border-style: solid;
+      box-shadow: 0 0 10px rgba(255,26,26,0.7);
+    }
+    .corner.tl { top: -2px;    left: -2px;  border-width: 3px 0 0 3px; }
+    .corner.tr { top: -2px;    right: -2px; border-width: 3px 3px 0 0; }
+    .corner.bl { bottom: -2px; left: -2px;  border-width: 0 0 3px 3px; }
+    .corner.br { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; }
+
+    /* Labels */
+    .label {
+      position: absolute;
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 4px;
+      background: #080808;
+      padding: 0 8px;
+    }
+    .label-top {
+      top: -10px; left: 22px;
+      color: #00ff41;
+      text-shadow: 0 0 8px #00ff41;
+    }
+    .label-bot {
+      bottom: -10px; right: 22px;
+      color: #ff1a1a;
+      text-shadow: 0 0 8px #ff1a1a;
+    }
+
+    /* Pixel canvas */
+    .pixel-art {
+      position: relative;
+      overflow: visible;
+    }
+
+    #art {
+      display: block;
+      position: absolute;
+      top: 0; left: 0;
+      width: 7px; height: 7px;
+      background: transparent;
+      border: none;
+      animation: breathe 2.8s ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% { filter: brightness(1) saturate(1);    }
+      50%       { filter: brightness(1.28) saturate(1.2); }
+    }
+
+    /* Responsive scale-down on small screens */
+    @media (max-width: 540px) {
+      .frame { transform: scale(0.62); transform-origin: center center; }
+    }
+    @media (max-width: 380px) {
+      .frame { transform: scale(0.48); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="frame">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+    <div class="label label-top">// RIPPERS //</div>
+    <div class="label label-bot">EST · NEW ERA</div>
+
+    <div class="pixel-art" id="canvas">
+      <div id="art"></div>
+    </div>
+  </div>
+
+<script>
+  /* ─────────────────────────────────────────────
+     CONFIG
+  ───────────────────────────────────────────── */
+  const S        = 7;   // px per pixel-unit
+  const CHAR_GAP = 2;   // gap between chars (pixel-units)
+  const LINE_GAP = 3;   // gap between rows  (pixel-units)
+  const CHAR_H   = 7;   // font height
+
+  /* ─────────────────────────────────────────────
+     COLOUR PALETTE
+  ───────────────────────────────────────────── */
+  const GREEN  = '#00ff41';
+  const RED    = '#ff1a33';
+  const GOLD   = '#ffd700';
+  const G_GLOW = 'rgba(0,255,65,0.22)';
+  const R_GLOW = 'rgba(255,26,51,0.22)';
+  const D_GLOW = 'rgba(255,215,0,0.18)';
+
+  /* ─────────────────────────────────────────────
+     5 × 7 PIXEL FONT
+     1 = lit pixel, 0 = off
+  ───────────────────────────────────────────── */
+  const FONT = {
+    R: [
+      [1,1,1,1,0],
+      [1,0,0,0,1],
+      [1,0,0,0,1],
+      [1,1,1,1,0],
+      [1,0,1,0,0],
+      [1,0,0,1,0],
+      [1,0,0,0,1],
+    ],
+    I: [
+      [1,1,1,1,1],
+      [0,0,1,0,0],
+      [0,0,1,0,0],
+      [0,0,1,0,0],
+      [0,0,1,0,0],
+      [0,0,1,0,0],
+      [1,1,1,1,1],
+    ],
+    P: [
+      [1,1,1,1,0],
+      [1,0,0,0,1],
+      [1,0,0,0,1],
+      [1,1,1,1,0],
+      [1,0,0,0,0],
+      [1,0,0,0,0],
+      [1,0,0,0,0],
+    ],
+    E: [
+      [1,1,1,1,1],
+      [1,0,0,0,0],
+      [1,0,0,0,0],
+      [1,1,1,1,0],
+      [1,0,0,0,0],
+      [1,0,0,0,0],
+      [1,1,1,1,1],
+    ],
+    S: [
+      [0,1,1,1,1],
+      [1,0,0,0,0],
+      [1,0,0,0,0],
+      [0,1,1,1,0],
+      [0,0,0,0,1],
+      [0,0,0,0,1],
+      [1,1,1,1,0],
+    ],
+    N: [
+      [1,0,0,0,1],
+      [1,1,0,0,1],
+      [1,0,1,0,1],
+      [1,0,1,0,1],
+      [1,0,0,1,1],
+      [1,0,0,0,1],
+      [1,0,0,0,1],
+    ],
+    W: [
+      [1,0,0,0,1],
+      [1,0,0,0,1],
+      [1,0,0,0,1],
+      [1,0,1,0,1],
+      [1,0,1,0,1],
+      [1,1,0,1,1],
+      [0,1,0,1,0],
+    ],
+    A: [
+      [0,1,1,1,0],
+      [1,0,0,0,1],
+      [1,0,0,0,1],
+      [1,1,1,1,1],
+      [1,0,0,0,1],
+      [1,0,0,0,1],
+      [1,0,0,0,1],
+    ],
+    ' ': [
+      [0,0,0],
+      [0,0,0],
+      [0,0,0],
+      [0,0,0],
+      [0,0,0],
+      [0,0,0],
+      [0,0,0],
+    ],
+  };
+
+  /* ─────────────────────────────────────────────
+     SKULL ICON — 13 × 10
+  ───────────────────────────────────────────── */
+  const SKULL = [
+    [0,0,1,1,1,1,1,1,1,1,1,0,0],  // dome top
+    [0,1,1,1,1,1,1,1,1,1,1,1,0],  // dome full
+    [1,1,0,0,1,1,1,1,1,0,0,1,1],  // eye sockets
+    [1,1,0,0,1,1,1,1,1,0,0,1,1],  // eye sockets
+    [1,1,1,1,1,1,1,1,1,1,1,1,1],  // cheekbones
+    [0,1,1,1,1,1,1,1,1,1,1,1,0],  // face
+    [0,1,1,1,1,1,1,1,1,1,1,1,0],  // face
+    [0,0,1,0,1,0,1,0,1,0,1,0,0],  // teeth row
+    [0,0,1,1,0,1,0,1,0,1,1,0,0],  // lower teeth
+    [0,0,0,1,1,0,0,0,1,1,0,0,0],  // chin/jaw
+  ];
+
+  /* ─────────────────────────────────────────────
+     HELPERS
+  ───────────────────────────────────────────── */
+  const cW = ch => (FONT[ch] ? FONT[ch][0].length : 3);
+  const lW = str => [...str].reduce((acc, ch, i, arr) =>
+    acc + cW(ch) + (i < arr.length - 1 ? CHAR_GAP : 0), 0);
+
+  /* ─────────────────────────────────────────────
+     LAYOUT
+  ───────────────────────────────────────────── */
+  const line1  = 'RIPPERS';
+  const line2  = 'NEW ERA';
+  const w1     = lW(line1);          // 47
+  const w2     = lW(line2);          // 45
+  const skullW = SKULL[0].length;    // 13
+  const skullH = SKULL.length;       // 10
+  const totalW = Math.max(w1, w2, skullW);  // 47
+
+  const sX  = Math.floor((totalW - skullW) / 2);  // 17
+  const sY  = 0;
+  const l1X = Math.floor((totalW - w1) / 2);       // 0
+  const l1Y = skullH + LINE_GAP;                    // 13
+  const l2X = Math.floor((totalW - w2) / 2);       // 1
+  const l2Y = l1Y + CHAR_H + LINE_GAP;              // 23
+
+  /* ─────────────────────────────────────────────
+     SHADOW BUILDER
+     Sharp layers first (rendered on top), glow behind
+  ───────────────────────────────────────────── */
+  const sharps = [];
+  const glows  = [];
+
+  function plot(bitmap, ox, oy, color, glow) {
+    bitmap.forEach((row, r) => {
+      row.forEach((on, c) => {
+        if (on) {
+          const x = (ox + c) * S;
+          const y = (oy + r) * S;
+          sharps.push(`${x}px ${y}px 0 0 ${color}`);
+          glows.push( `${x}px ${y}px 9px 3px ${glow}`);
+        }
+      });
+    });
+  }
+
+  function plotText(str, ox, oy, color, glow) {
+    let cx = ox;
+    for (const ch of str) {
+      plot(FONT[ch] || FONT[' '], cx, oy, color, glow);
+      cx += cW(ch) + CHAR_GAP;
+    }
+  }
+
+  /* ─────────────────────────────────────────────
+     RENDER ALL LAYERS
+  ───────────────────────────────────────────── */
+  plot(SKULL,  sX,  sY,  GOLD,  D_GLOW);
+  plotText(line1, l1X, l1Y, GREEN, G_GLOW);
+  plotText(line2, l2X, l2Y, RED,   R_GLOW);
+
+  /* Apply to the element */
+  document.getElementById('art').style.boxShadow =
+    [...sharps, ...glows].join(',');
+
+  /* Size the canvas wrapper */
+  const cvs = document.getElementById('canvas');
+  cvs.style.width  = `${totalW * S}px`;
+  cvs.style.height = `${(l2Y + CHAR_H) * S}px`;
+</script>
+</body>
+</html>
